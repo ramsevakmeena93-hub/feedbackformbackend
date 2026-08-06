@@ -51,7 +51,7 @@ router.get('/my', authMiddleware, requireRole('hod'), async (req, res) => {
       .populate({
         path: 'reports',
         model: 'FacultyReport',
-        select: 'facultyName subjectCode ffiScore status semester programme appreciationCount attentionCount commentsNeedingAttention appreciation commentPercentages actionTaken hodRemarks driveLink academicYear'
+        select: 'facultyName subjectCode ffiScore status semester programme appreciationCount attentionCount commentsNeedingAttention appreciation commentPercentages actionTaken hodRemarks driveLink academicYear responseCount totalResponses'
       })
       .sort({ createdAt: -1 });
     res.json(submissions);
@@ -78,7 +78,7 @@ router.get('/faculty', authMiddleware, requireRole('faculty'), async (req, res) 
       .populate({
         path: 'reports',
         model: 'FacultyReport',
-        select: 'facultyName subjectCode ffiScore status semester programme appreciationCount attentionCount commentsNeedingAttention appreciation commentPercentages actionTaken hodRemarks driveLink academicYear facultyUserId'
+        select: 'facultyName subjectCode ffiScore status semester programme appreciationCount attentionCount commentsNeedingAttention appreciation commentPercentages actionTaken hodRemarks driveLink academicYear facultyUserId responseCount totalResponses'
       });
 
     // For each submission, filter reports to only keep the faculty member's reports
@@ -107,7 +107,7 @@ router.get('/all', authMiddleware, requireRole('vc'), async (req, res) => {
       .populate({
         path: 'reports',
         model: 'FacultyReport',
-        select: 'facultyName subjectCode ffiScore status appreciationCount attentionCount commentsNeedingAttention appreciation commentPercentages actionTaken hodRemarks driveLink'
+        select: 'facultyName subjectCode ffiScore status appreciationCount attentionCount commentsNeedingAttention appreciation commentPercentages actionTaken hodRemarks driveLink responseCount totalResponses'
       })
       .sort({ createdAt: -1 });
     res.json(submissions);
@@ -124,8 +124,33 @@ router.patch('/:id/status', authMiddleware, requireRole('vc'), async (req, res) 
       req.params.id,
       { status, vcComment, ...(status === 'approved' ? { finalReportDate: new Date() } : {}) },
       { new: true }
-    ).populate('hodId', 'name email');
+    ).populate('hodId', 'name email department');
     if (!submission) return res.status(404).json({ error: 'Submission not found' });
+
+    // Send email notifications
+    try {
+      const { emailHODVCApproved, emailHODVCRejected } = require('../services/emailService');
+      if (status === 'approved') {
+        await emailHODVCApproved({
+          hodEmail: submission.hodId.email,
+          hodName: submission.hodId.name,
+          department: submission.hodId.department || submission.department,
+          academicYear: submission.academicYear,
+          session: submission.session,
+          submissionId: submission._id,
+        });
+      } else if (status === 'rejected') {
+        await emailHODVCRejected({
+          hodEmail: submission.hodId.email,
+          hodName: submission.hodId.name,
+          department: submission.hodId.department || submission.department,
+          academicYear: submission.academicYear,
+          vcComment,
+        });
+      }
+    } catch (emailErr) {
+      console.warn('[Email] VC status email failed:', emailErr.message);
+    }
 
     // Create notifications on VC update
     try {
@@ -137,7 +162,7 @@ router.patch('/:id/status', authMiddleware, requireRole('vc'), async (req, res) 
         await Notification.create({
           userId: submission.hodId._id || submission.hodId,
           type: 'vc_approved',
-          message: `VC has approved your submission for Academic Year ${submission.academicYear || ''}, Session ${submission.session === 'jan-may' ? 'Jan-May' : 'Aug-Dec'}.`,
+          message: `VC has approved your submission for Academic Year ${submission.academicYear || ''}, Session ${submission.session === 'jan-may' ? 'Jan-Jun' : 'Jul-Dec'}.`,
           submissionId: submission._id
         });
 

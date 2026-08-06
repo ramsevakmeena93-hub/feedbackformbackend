@@ -1,0 +1,23 @@
+[phases.setup]
+nixPkgs = [
+  "nodejs_20",
+  "python3",
+  "pkg-config",
+  "cairo",
+  "pango",
+  "libpng",
+  "libjpeg",
+  "giflib",
+  "librsvg",
+  "pixman",
+  "vips"
+]
+
+[phases.install]
+cmds = ["npm install --legacy-peer-deps"]
+
+[phases.build]
+cmds = []
+
+[start]
+cmd = "node server.js"

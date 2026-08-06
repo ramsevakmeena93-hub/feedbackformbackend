@@ -445,18 +445,18 @@ async function extractMetaFromBuffer(buffer) {
   const ffiItem = dataRowItems.filter(i => /^\d+\.\d+$/.test(i.str)).sort((a, b) => b.x - a.x)[0];
   meta.ffiScore = ffiItem ? parseFloat(ffiItem.str) : null;
 
-  // Response Count: Look for an integer string to the LEFT of FFI score
-  const ffiX = ffiItem ? ffiItem.x : 540;
-  // Search for an integer between FFI and 250px to its left (matches your screenshot layout)
-  const respItem = dataRowItems.find(i => i.x < ffiX - 10 && i.x > ffiX - 250 && /^\d+$/.test(i.str));
-  meta.responseCount = respItem ? parseInt(respItem.str, 10) : null;
+  // Response Count: Look for an integer or percentage to the RIGHT of FFI score
+  const ffiX = ffiItem ? ffiItem.x : 270;
+  // Search for an integer between FFI and 100px to its right
+  const respItem = dataRowItems.find(i => i.x > ffiX + 10 && i.x < ffiX + 100 && /^\d+%?$/.test(i.str.trim()));
+  meta.responseCount = respItem ? parseInt(respItem.str.replace('%', '').trim(), 10) : null;
 
   // GLOBAL FALLBACK Pattern Recognition
   if (meta.responseCount === null) {
      const fullText = items.map(i => i.str).join(" ");
-     const m = fullText.match(/Respon[sc]e[ \t]*[:\-]?\s*(\d+)/i) || 
-               fullText.match(/Resp[ \t]*[:\-]?\s*(\d+)/i) ||
-               fullText.match(/Ans[ \t]*[:\-]?\s*(\d+)/i);
+     const m = fullText.match(/Respon[sc]e[ \t]*%?[ \t]*[:\-]?\s*(\d+)%?/i) || 
+               fullText.match(/Resp[ \t]*%?[ \t]*[:\-]?\s*(\d+)%?/i) ||
+               fullText.match(/Ans[ \t]*[:\-]?\s*(\d+)%?/i);
      if (m) meta.responseCount = parseInt(m[1], 10);
   }
 
@@ -505,7 +505,7 @@ async function analyzePDF(pdfLink) {
  * Counts exact keyword occurrences across ALL comments (not just classified ones).
  * Returns: { "Excellent": 10, "Very Good": 25, "Good": 65 } (percentages)
  */
-function calculateCommentPercentages(allComments) {
+function calculateCommentPercentages(allComments, responseCount) {
   if (!allComments || allComments.length === 0) return {};
 
   const KEYWORDS = {
@@ -537,7 +537,7 @@ function calculateCommentPercentages(allComments) {
     }
   });
 
-  const total = allComments.length; // percentage of ALL comments, not just matched
+  const total = responseCount && responseCount > 0 ? responseCount : allComments.length;
   const result = {};
   for (const [label, count] of Object.entries(counts)) {
     if (count > 0) {
@@ -575,7 +575,7 @@ async function analyzePDFBuffer(buffer) {
     commentsNeedingAttention = highlights.commentsNeedingAttention;
   }
 
-  const commentPercentages = calculateCommentPercentages(allComments);
+  const commentPercentages = calculateCommentPercentages(allComments, meta.responseCount);
 
   return {
     appreciation,

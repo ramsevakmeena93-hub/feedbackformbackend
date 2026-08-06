@@ -101,11 +101,16 @@ router.post('/bulk-send-to-faculty', authMiddleware, async (req, res) => {
       const report = await FacultyReport.findOne({ _id: reportId, hodId: req.user.id });
       if (!report || report.status !== 'processed') continue;
       let facultyUserId = report.facultyUserId;
-      if (!facultyUserId && report.facultyName) {
-        const fu = await User.findOne({ role: 'faculty', name: { $regex: report.facultyName.split(' ')[0], $options: 'i' } });
-        if (fu) facultyUserId = fu._id;
-      }
-      const updated = await FacultyReport.findByIdAndUpdate(report._id, { status: 'sent_to_faculty', sentToFacultyAt: new Date(), ...(facultyUserId ? { facultyUserId } : {}) }, { new: true });
+        if (!facultyUserId && report.facultyName) {
+          const fu = await User.findOne({ role: 'faculty', name: { $regex: report.facultyName.split(' ')[0], $options: 'i' } });
+          if (fu) facultyUserId = fu._id;
+        }
+
+        if (!facultyUserId) {
+          return res.status(400).json({ error: `Faculty ${report.facultyName} has not logged in or registered yet. Please ask them to create an account.` });
+        }
+
+        const updated = await FacultyReport.findByIdAndUpdate(report._id, { status: 'sent_to_faculty', sentToFacultyAt: new Date(), ...(facultyUserId ? { facultyUserId } : {}) }, { new: true });
       
       // Create notification
       if (facultyUserId) {
@@ -154,15 +159,19 @@ router.post('/:id/send-to-faculty', authMiddleware, async (req, res) => {
     // Try to find faculty user account by name match
     const User = require('../models/User');
     let facultyUserId = report.facultyUserId;
-    if (!facultyUserId && report.facultyName) {
-      const facultyUser = await User.findOne({
-        role: 'faculty',
-        name: { $regex: report.facultyName.split(' ')[0], $options: 'i' }
-      });
-      if (facultyUser) facultyUserId = facultyUser._id;
-    }
+      if (!facultyUserId && report.facultyName) {
+        const facultyUser = await User.findOne({
+          role: 'faculty',
+          name: { $regex: report.facultyName.split(' ')[0], $options: 'i' }
+        });
+        if (facultyUser) facultyUserId = facultyUser._id;
+      }
 
-    const updated = await FacultyReport.findByIdAndUpdate(
+      if (!facultyUserId) {
+        return res.status(400).json({ error: `Faculty ${report.facultyName} has not logged in or registered yet. Please ask them to create an account.` });
+      }
+  
+      const updated = await FacultyReport.findByIdAndUpdate(
       report._id,
       {
         status: 'sent_to_faculty',
