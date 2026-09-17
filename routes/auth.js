@@ -11,6 +11,21 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret';
 const TOKEN_EXPIRY = '7d';
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Domain whitelist — only @mitsgwalior.in is allowed
+// Admin accounts (role='admin') bypass this check so admin can always log in
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ALLOWED_DOMAIN = '@mitsgwalior.in';
+
+function isAllowedEmail(email, role) {
+  if (!email) return false;
+  const lower = email.toLowerCase();
+  // Admin accounts bypass domain restriction
+  if (role === 'admin') return true;
+  return lower.endsWith(ALLOWED_DOMAIN);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Helper: build full user payload (used in login + /me responses)
 // ─────────────────────────────────────────────────────────────────────────────
 

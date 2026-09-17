@@ -102,6 +102,9 @@ router.post('/process-one', authMiddleware, async (req, res) => {
       attentionCount: result.attentionCount,
       ffiScore: result.ffiScore ?? meta.ffiScore ?? null,
       responseCount: req.body.responseCount ?? result.responseCount ?? meta.responseCount ?? null,
+      rawStudentComments: result.rawStudentComments || [],
+      commentCategories: result.commentCategories || {},
+      commentPercentages: result.commentPercentages || {},
       status: 'processed',
       analyzedAt: result.analyzedAt
     });
@@ -215,6 +218,9 @@ router.post('/upload-pdfs', authMiddleware, pdfUpload.array('pdfs', 50), async (
           programme: pdfMeta.programme || report.programme || '',
           semester: pdfMeta.semester || report.semester || '',
           ffiScore: result.ffiScore ?? pdfMeta.ffiScore ?? null,
+          rawStudentComments: result.rawStudentComments || [],
+          commentCategories: result.commentCategories || {},
+          commentPercentages: result.commentPercentages || {},
           status: 'processed'
         });
       })

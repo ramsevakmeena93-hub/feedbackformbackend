@@ -558,21 +558,18 @@ async function analyzePDFBuffer(buffer) {
 
   let appreciation = [];
   let commentsNeedingAttention = [];
+  let commentCategories = {};
 
   if (allComments.length > 0) {
     try {
       const aiResult = await analyzeCommentsWithAI(allComments);
       appreciation = aiResult.appreciation;
       commentsNeedingAttention = aiResult.commentsNeedingAttention;
+      commentCategories = aiResult.commentCategories || {};
     } catch (aiErr) {
-      const highlights = await extractHighlightedText(buffer);
-      appreciation = highlights.appreciation;
-      commentsNeedingAttention = highlights.commentsNeedingAttention;
+      console.warn('[PDF] AI analysis failed, all comments go to appreciation:', aiErr.message);
+      appreciation = allComments;
     }
-  } else {
-    const highlights = await extractHighlightedText(buffer);
-    appreciation = highlights.appreciation;
-    commentsNeedingAttention = highlights.commentsNeedingAttention;
   }
 
   const commentPercentages = calculateCommentPercentages(allComments, meta.responseCount);
@@ -583,6 +580,8 @@ async function analyzePDFBuffer(buffer) {
     appreciationCount: appreciation.length,
     attentionCount: commentsNeedingAttention.length,
     commentPercentages,
+    commentCategories,
+    rawStudentComments: allComments,
     meta, // Include full meta object
     ffiScore: meta.ffiScore ?? null,
     responseCount: meta.responseCount ?? null,
