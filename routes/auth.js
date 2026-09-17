@@ -344,20 +344,41 @@ router.post('/google', async (req, res) => {
     const { credential } = req.body;
     if (!credential) return res.status(400).json({ error: 'No credential provided' });
 
+    // ── Step 1: Verify Google ID token (Google OAuth 2.0 policy compliant) ──
     let googlePayload;
     try {
       const { OAuth2Client } = require('google-auth-library');
       const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
-      const ticket = await client.verifyIdToken({ idToken: credential, audience: process.env.GOOGLE_CLIENT_ID });
+      const ticket = await client.verifyIdToken({
+        idToken: credential,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
       googlePayload = ticket.getPayload();
-    } catch {
-      googlePayload = jwt.decode(credential);
+    } catch (verifyErr) {
+      console.error('[Auth] Google token verification failed:', verifyErr.message);
+      return res.status(401).json({ error: 'Invalid or expired Google token. Please try again.' });
     }
 
-    if (!googlePayload?.email) return res.status(400).json({ error: 'Failed to verify Google token' });
+    if (!googlePayload?.email) {
+      return res.status(400).json({ error: 'Google token missing email claim' });
+    }
+
+    // ── Step 2: Verify email is confirmed by Google ──
+    if (!googlePayload.email_verified) {
+      return res.status(403).json({ error: 'Google email is not verified' });
+    }
 
     const { email, name, picture, sub } = googlePayload;
 
+    // ── Step 3: Enforce institutional domain restriction ──
+    if (!email.toLowerCase().endsWith(ALLOWED_DOMAIN)) {
+      console.warn(`[Auth] Google OAuth — blocked non-institutional email: ${email}`);
+      return res.status(403).json({
+        error: `Only ${ALLOWED_DOMAIN} accounts are allowed. Please use your institutional Google account.`,
+      });
+    }
+
+    // ── Step 4: Find or create user ──
     let user = await User.findOne({ email: email.toLowerCase() });
     if (!user) {
       let assignedRole = 'faculty';
@@ -384,10 +405,15 @@ router.post('/google', async (req, res) => {
       await UserRole.create({ userId: user._id, role: assignedRole });
       console.log(`[Auth] Google OAuth — new user: ${user.name} (${email}) [${assignedRole}]`);
     } else {
-      user.googleId      = sub || user.googleId;
+      // Check if account is suspended
+      if (user.status === 'suspended') {
+        return res.status(403).json({ error: 'Account suspended. Contact admin.' });
+      }
+
+      user.googleId       = sub || user.googleId;
       user.googleVerified = true;
-      user.lastLogin     = new Date();
-      user.loginCount    = (user.loginCount || 0) + 1;
+      user.lastLogin      = new Date();
+      user.loginCount     = (user.loginCount || 0) + 1;
       if (picture) user.profilePhoto = picture;
       await user.save();
 
@@ -399,6 +425,7 @@ router.post('/google', async (req, res) => {
       console.log(`[Auth] Google OAuth — login: ${user.name} (${email}) [${user.role}]`);
     }
 
+    // ── Step 5: Issue JWT and respond ──
     const payload = await buildUserPayload(user);
     const token   = signToken(user, payload.roles, payload.activeWorkspace);
     res.json({
