@@ -12,6 +12,25 @@ const facultyReportSchema = new mongoose.Schema({
   pdfLink: { type: String, default: '' },
   driveLink: { type: String, default: '' },
 
+  // ── Extended location fields (separate from roles) ──────────────────
+  /** Branch — e.g. "CSE", "IT", "EC". Complements programme (which holds the full degree name). */
+  branch:   { type: String, default: '' },
+
+  /** Section — e.g. "A", "B", "C" */
+  section:  { type: String, default: '' },
+
+  /**
+   * Reference to a TeachingAssignment document.
+   * Linked when a report is sent to faculty and the backend can match
+   * the subjectCode+branch+section to a known assignment.
+   * Optional — reports can exist without a formal assignment.
+   */
+  teachingAssignmentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'TeachingAssignment',
+    default: null,
+  },
+
   // AI + color-based analysis
   appreciation: [{ type: String }],
   commentsNeedingAttention: [{ type: String }],
